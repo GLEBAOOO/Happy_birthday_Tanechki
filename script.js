@@ -1,289 +1,262 @@
-const lightbox = document.getElementById('lightbox');
-const lightboxImage = document.getElementById('lightboxImage');
-const lightboxTitle = document.getElementById('lightboxTitle');
-const links = document.querySelectorAll('.header__list-link');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-function openLightbox(src, title) {
-  lightboxImage.src = src;
-  lightboxImage.alt = title || '';
-  lightboxTitle.textContent = title || '';
-  lightbox.classList.add('is-open');
-  lightbox.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeLightbox() {
-  lightbox.classList.remove('is-open');
-  lightbox.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = '';
-  // очищаем src после анимации, чтобы не мигало
-  setTimeout(() => { lightboxImage.src = ''; }, 350);
-}
-
-links.forEach(link => {
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    const src = link.dataset.image;
-    if (!src) return;
-    openLightbox(src, link.dataset.title);
-  });
-});
-
-// закрытие: клик по фону или крестику
-document.querySelectorAll('[data-close]').forEach(el => {
-  el.addEventListener('click', closeLightbox);
-});
-
-// закрытие по Esc
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && lightbox.classList.contains('is-open')) {
-    closeLightbox();
-  }
-});
-
-
-document.querySelector("#another-gift")?.addEventListener("click", (event) => {
-  event.preventDefault();
-
-  const burst = document.createElement("div");
-  burst.className = "balloon-burst";
-  burst.setAttribute("aria-hidden", "true");
-  document.body.appendChild(burst);
-
-  function launchParty() {
-    for (let i = 0; i < 25; i++) {
-      const balloon = document.createElement("span");
-      balloon.className = "balloon";
-      balloon.style.setProperty("--left", `${Math.random() * 100}%`);
-      balloon.style.setProperty("--size", `${65 + Math.random() * 45}px`);
-      balloon.style.setProperty("--delay", `${Math.random() * 1.2}s`);
-      balloon.style.setProperty("--duration", `${6 + Math.random() * 2}s`);
-      burst.appendChild(balloon);
-    }
-  }
-
-  launchParty();                  // первая партия
-  setTimeout(launchParty, 5000); // вторая партия через 5 секунд
-
-  setTimeout(() => burst.remove(), 16000);
-});
-
-document.querySelector("#scroll-to-beginning")?.addEventListener("click", () => {
-  document.querySelector("#beginning")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start"
-  });
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* =========================================================
+   ЕДИНЫЙ КОНТРОЛЛЕР МОДАЛЬНОГО ОКНА
+   Три режима: одно фото, галерея детства, видео
+   ========================================================= */
 (() => {
+  const lightbox = document.getElementById('lightbox');
+  if (!lightbox) return;
+
+  const box = lightbox.querySelector('.lightbox__box');
+  const closeButton = lightbox.querySelector('.lightbox__close');
+  const image = document.getElementById('lightboxImage');
+  const title = document.getElementById('lightboxTitle');
+  const counter = document.getElementById('memory-counter');
+  const prevButton = document.getElementById('memory-prev');
+  const nextButton = document.getElementById('memory-next');
+  const gallery = lightbox.querySelector('.memory-gallery');
+  const video = document.getElementById('lightboxVideo');
+
+  const galleryButton = document.getElementById('open-memory-gallery');
+  const videoButton = document.getElementById('show-video');
+  const headerLinks = document.querySelectorAll('.header__list-link[data-image]');
+
+  // Фото детства (кнопка «Посмотреть фотографии»)
   const photos = [
-    "img/2.5.1.jpg",
-    "img/2.5.2.jpg",
-    "img/2.5.3.jpg",
-    "img/2.5.4.jpg",
-    "img/2.5.5.jpg",
-    "img/2.5.6.jpg"
-    
+    'img/2.5.1.jpg',
+    'img/2.5.2.jpg',
+    'img/2.5.3.jpg',
+    'img/2.5.4.jpg',
+    'img/2.5.5.jpg',
+    'img/2.5.6.jpg'
   ];
 
-  const openButton = document.querySelector("#open-memory-gallery");
-  const lightbox = document.querySelector("#lightbox");
-  const image = document.querySelector("#lightboxImage");
-  const title = document.querySelector("#lightboxTitle");
-  const counter = document.querySelector("#memory-counter");
-  const prevButton = document.querySelector("#memory-prev");
-  const nextButton = document.querySelector("#memory-next");
+  const SLIDE_INTERVAL = 3000;
 
-  if (!openButton || !lightbox || !image || !title || !counter) return;
-
+  let activePhotos = photos;
   let current = 0;
-  let timer;
+  let slideTimer = null;
+  let clearSrcTimer = null;
+  let lastFocused = null;
+
+  const isOpen = () => lightbox.classList.contains('is-open');
+
+  function setNavVisible(visible) {
+    [prevButton, nextButton, counter].forEach((el) => {
+      if (el) el.hidden = !visible;
+    });
+  }
 
   function showPhoto(index) {
-    current = (index + photos.length) % photos.length;
-    image.src = photos[current];
-    image.alt = `Фотография ${current + 1}`;
-    counter.textContent = `${current + 1} из ${photos.length}`;
+    current = (index + activePhotos.length) % activePhotos.length;
+    image.src = activePhotos[current];
+    image.alt = `Фотография ${current + 1} из ${activePhotos.length}`;
+    counter.textContent = `${current + 1} из ${activePhotos.length}`;
   }
 
   function stopSlideshow() {
-    clearInterval(timer);
-    timer = undefined;
+    if (slideTimer !== null) {
+      clearInterval(slideTimer);
+      slideTimer = null;
+    }
   }
 
   function startSlideshow() {
     stopSlideshow();
-    timer = setInterval(() => {
-      if (!lightbox.classList.contains("is-open")) {
-        stopSlideshow();
-        return;
-      }
-      showPhoto(current + 1);
-    }, 3000);
+    if (reduceMotion.matches) return;
+    slideTimer = setInterval(() => showPhoto(current + 1), SLIDE_INTERVAL);
   }
 
-  openButton.addEventListener("click", () => {
-    showPhoto(0);
-    if (prevButton) prevButton.hidden = false;
-if (nextButton) nextButton.hidden = false;
-if (counter) counter.hidden = false;
+  function resetModes() {
+    stopSlideshow();
+    clearTimeout(clearSrcTimer);
 
-    title.textContent = "Наши фотографии";
-    lightbox.classList.add("is-open");
-    lightbox.setAttribute("aria-hidden", "false");
-    startSlideshow();
+    video.pause();
+    video.hidden = true;
+    activePhotos = photos;
+    gallery.hidden = false;
+    setNavVisible(false);
+    counter.textContent = '';
+    lightbox.classList.remove('is-video');
+    if (videoButton) videoButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function openModal({ type, src, titleText }) {
+    resetModes();
+    lastFocused = document.activeElement;
+
+    if (type === 'gallery') {
+      showPhoto(0);
+      setNavVisible(true);
+      title.textContent = 'Наши фотографии';
+      startSlideshow();
+    } else if (type === 'video') {
+      video.hidden = false;
+      gallery.hidden = true;
+      title.textContent = 'Наше видео';
+      lightbox.classList.add('is-video');
+      if (videoButton) videoButton.setAttribute('aria-expanded', 'true');
+      video.currentTime = 0;
+      video.play().catch(() => {
+        // Автозапуск может быть запрещён — пользователь включит видео вручную.
+      });
+    } else {
+      image.src = src;
+      image.alt = titleText || '';
+      title.textContent = titleText || '';
+    }
+
+    lightbox.classList.add('is-open');
+    lightbox.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    closeButton?.focus();
+  }
+
+  function closeModal() {
+    if (!isOpen()) return;
+
+    stopSlideshow();
+    video.pause();
+    video.hidden = true;
+    lightbox.classList.remove('is-open', 'is-video');
+    lightbox.setAttribute('aria-hidden', 'true');
+    if (videoButton) videoButton.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+
+    // Очищаем src только после анимации закрытия и только если окно не открыли снова.
+    clearSrcTimer = setTimeout(() => {
+      if (!isOpen()) {
+        image.removeAttribute('src');
+        image.alt = '';
+      }
+    }, 350);
+
+    if (lastFocused && document.contains(lastFocused)) {
+      lastFocused.focus();
+    }
+  }
+
+  headerLinks.forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!link.dataset.image) return;
+      openModal({
+        type: 'image',
+        src: link.dataset.image,
+        titleText: link.dataset.title
+      });
+    });
   });
 
-  prevButton?.addEventListener("click", () => {
+  galleryButton?.addEventListener('click', () => openModal({ type: 'gallery' }));
+  videoButton?.addEventListener('click', () => openModal({ type: 'video' }));
+
+  prevButton?.addEventListener('click', () => {
     showPhoto(current - 1);
     startSlideshow();
   });
 
-  nextButton?.addEventListener("click", () => {
+  nextButton?.addEventListener('click', () => {
     showPhoto(current + 1);
     startSlideshow();
   });
 
-  lightbox.querySelectorAll("[data-close]").forEach((button) => {
-    button.addEventListener("click", stopSlideshow);
+  lightbox.querySelectorAll('[data-close]').forEach((el) => {
+    el.addEventListener('click', closeModal);
   });
 
-  document.querySelectorAll(".header__list-link[data-image]").forEach((link) => {
-  link.addEventListener("click", () => {
-    stopSlideshow();
-    if (prevButton) prevButton.hidden = true;
-    if (nextButton) nextButton.hidden = true;
-    if (counter) counter.hidden = true;
-  });
-});
+  document.addEventListener('keydown', (event) => {
+    if (!isOpen()) return;
 
+    if (event.key === 'Escape') {
+      closeModal();
+      return;
+    }
+
+    // Удерживаем фокус внутри диалога
+    if (event.key === 'Tab' && box) {
+      const focusable = Array.from(
+        box.querySelectorAll('button, video, [href], [tabindex]:not([tabindex="-1"])')
+      ).filter((el) => !el.hidden && el.getClientRects().length > 0);
+
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  });
 })();
 
+/* =========================================================
+   ШАРИКИ ПОД АРКАМИ
+   ========================================================= */
+document.querySelector('#another-gift')?.addEventListener('click', (event) => {
+  event.preventDefault();
 
-document.querySelector("#parents-heart")?.addEventListener("click", (event) => {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const heart = document.createElement("span");
+  if (reduceMotion.matches || document.querySelector('.balloon-burst')) return;
 
-  heart.className = "floating-heart";
-  heart.textContent = "♥";
-  heart.style.left = `${rect.left + rect.width / 2}px`;
-  heart.style.top = `${rect.top}px`;
- heart.style.setProperty("--drift", `${Math.random() * 70 - 35}px`);
+  const burst = document.createElement('div');
+  burst.className = 'balloon-burst';
+  burst.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(burst);
 
-  document.body.appendChild(heart);
-  heart.addEventListener("animationend", () => heart.remove(), { once: true });
-});
-
-
-
-
-
-
-
-
-
-
-
-
-document.querySelector("#back-to-top")?.addEventListener("click", () => {
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-});
-
-
-
-
-
-(() => {
-  const videoButton = document.querySelector("#show-video");
-  const lightbox = document.querySelector("#lightbox");
-  const video = document.querySelector("#lightboxVideo");
-  const photoGallery = document.querySelector(".memory-gallery");
-  const counter = document.querySelector("#memory-counter");
-  const title = document.querySelector("#lightboxTitle");
-
-  if (!videoButton || !lightbox || !video || !title) {
-    console.error("Не найдены кнопка видео, lightbox или видеоплеер.");
-    return;
+  function launchParty() {
+    for (let i = 0; i < 25; i++) {
+      const balloon = document.createElement('span');
+      balloon.className = 'balloon';
+      balloon.style.setProperty('--left', `${Math.random() * 100}%`);
+      balloon.style.setProperty('--size', `${65 + Math.random() * 45}px`);
+      balloon.style.setProperty('--delay', `${Math.random() * 1.2}s`);
+      balloon.style.setProperty('--duration', `${6 + Math.random() * 2}s`);
+      burst.appendChild(balloon);
+    }
   }
 
-  videoButton.addEventListener("click", () => {
-    if (photoGallery) photoGallery.hidden = true;
-    if (counter) counter.hidden = true;
+  launchParty();
+  setTimeout(launchParty, 5000);
+  setTimeout(() => burst.remove(), 16000);
+});
 
-    title.textContent = "Наше видео";
-    video.hidden = false;
-    lightbox.classList.add("is-open", "is-video");
-    lightbox.setAttribute("aria-hidden", "false");
+/* =========================================================
+   ПРОКРУТКА
+   ========================================================= */
+const scrollBehavior = () => (reduceMotion.matches ? 'auto' : 'smooth');
 
-    video.currentTime = 0;
-    video.play().catch(() => {
-      // Если автозапуск запрещён, запустите видео кнопкой плеера.
-    });
+document.querySelector('#scroll-to-beginning')?.addEventListener('click', () => {
+  document.querySelector('#beginning')?.scrollIntoView({
+    behavior: scrollBehavior(),
+    block: 'start'
   });
+});
 
-  lightbox.querySelectorAll("[data-close]").forEach((button) => {
-    button.addEventListener("click", () => {
-      video.pause();
-      video.hidden = true;
-      lightbox.classList.remove("is-video");
-    });
-  });
+document.querySelector('#back-to-top')?.addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: scrollBehavior() });
+});
 
-  document.querySelectorAll(".header__list-link[data-image]").forEach((link) => {
-    link.addEventListener("click", () => {
-      video.pause();
-      video.hidden = true;
-      if (photoGallery) photoGallery.hidden = false;
-      if (counter) counter.hidden = false;
-      lightbox.classList.remove("is-video");
-    });
-  });
-})();
+/* =========================================================
+   ЛЕТАЮЩИЕ СЕРДЕЧКИ РОДИТЕЛЯМ
+   ========================================================= */
+document.querySelector('#parents-heart')?.addEventListener('click', (event) => {
+  if (reduceMotion.matches) return;
 
+  const rect = event.currentTarget.getBoundingClientRect();
+  const heart = document.createElement('span');
 
+  heart.className = 'floating-heart';
+  heart.textContent = '♥';
+  heart.style.left = `${rect.left + rect.width / 2}px`;
+  heart.style.top = `${rect.top}px`;
+  heart.style.setProperty('--drift', `${Math.random() * 70 - 35}px`);
 
-
-
-
-
-
-
-
-
-
-
-(() => {
-  const counter = document.querySelector("#memory-counter");
-  const arrows = document.querySelectorAll(
-    "#memory-prev, #memory-next"
-  );
-
-  // Верхние кнопки открывают отдельное фото — без счётчика и стрелок
-  document.querySelectorAll(".header__list-link[data-image]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (counter) counter.hidden = true;
-      arrows.forEach((arrow) => arrow.hidden = true);
-    });
-  });
-
-  // Кнопка галереи показывает слайд-шоу и элементы перелистывания
-  document.querySelector("#open-memory-gallery, #show-photos")?.addEventListener("click", () => {
-    if (counter) counter.hidden = false;
-    arrows.forEach((arrow) => arrow.hidden = false);
-  });
-})();
+  document.body.appendChild(heart);
+  heart.addEventListener('animationend', () => heart.remove(), { once: true });
+});
